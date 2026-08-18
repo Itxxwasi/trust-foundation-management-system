@@ -60,6 +60,28 @@ type PaymentReportResponse = {
   payments: PaymentReportRow[]
 }
 
+type ExpenditureItem = {
+  _id: string
+  expenditureId: string
+  title: string
+  category: "operations" | "charity" | "maintenance" | "salaries" | "events" | "other"
+  mode: "pay" | "received"
+  amount: number
+  date: string
+  description?: string
+  approvedBy?: string
+  receiptNumber?: string
+}
+
+const categoryOptions: Array<ExpenditureItem["category"]> = [
+  "salaries",
+  "operations",
+  "maintenance",
+  "charity",
+  "events",
+  "other",
+]
+
 function toCsv(rows: PaymentReportRow[]) {
   const header = [
     "donorId",
@@ -146,6 +168,14 @@ export default function ReportsPage() {
   const [statusReportData, setStatusReportData] = useState<PaymentReportRow[]>([])
   const [statusReportLoading, setStatusReportLoading] = useState(false)
   const [statusReportError, setStatusReportError] = useState("")
+
+  // Expenditure Report state
+  const [expCategory, setExpCategory] = useState("all")
+  const [expFromDate, setExpFromDate] = useState(startOfMonth)
+  const [expToDate, setExpToDate] = useState(today)
+  const [expenditures, setExpenditures] = useState<ExpenditureItem[]>([])
+  const [expLoading, setExpLoading] = useState(false)
+  const [expError, setExpError] = useState("")
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -777,6 +807,171 @@ export default function ReportsPage() {
     printWindow.print()
   }
 
+  // Load Expenditure Report
+  const loadExpenditureReport = async () => {
+    setExpLoading(true)
+    setExpError("")
+    try {
+      const params = new URLSearchParams()
+      if (expCategory !== "all") params.set("category", expCategory)
+      if (expFromDate) params.set("dateFrom", expFromDate)
+      if (expToDate) params.set("dateTo", expToDate)
+
+      const query = params.toString() ? `?${params.toString()}` : ""
+      const res = await fetch(`/api/expenditures${query}`)
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to load expenditures")
+      }
+
+      setExpenditures(data.expenditures || [])
+    } catch (error) {
+      setExpenditures([])
+      setExpError(error instanceof Error ? error.message : "Failed to load report")
+    } finally {
+      setExpLoading(false)
+    }
+  }
+
+  const handlePrintExpenditureReport = () => {
+    if (expenditures.length === 0) {
+      alert("No data to print")
+      return
+    }
+
+    const printWindow = window.open("", "", "height=800,width=1000")
+    if (!printWindow) {
+      alert("Please allow pop-ups to print the report")
+      return
+    }
+
+    let netAmount = 0
+    const rows = expenditures.map((item, index) => {
+      const itemAmount = item.mode === "received" ? Number(item.amount || 0) : -Number(item.amount || 0)
+      netAmount += itemAmount
+      return `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${formatDate(item.date)}</td>
+          <td>${escapeHtml(item.expenditureId)}</td>
+          <td>${escapeHtml(item.title)}</td>
+          <td style="text-transform: capitalize;">${item.category}</td>
+          <td style="text-transform: capitalize;">${item.mode}</td>
+          <td style="text-align: right;">${formatPKR(item.amount)}</td>
+        </tr>
+      `
+    }).join("")
+
+    const isNegative = netAmount < 0
+    const formattedNetAmount = formatPKR(Math.abs(netAmount))
+    const netAmountDisplay = isNegative ? `-${formattedNetAmount}` : formattedNetAmount
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Expenditures Report</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; color: #333; line-height: 1.4; margin: 20px; }
+            .print-header {
+              text-align: center;
+              border-bottom: 3px solid #000;
+              margin-bottom: 20px;
+              padding-bottom: 15px;
+            }
+            .print-header h1 { font-size: 22px; font-weight: bold; margin: 0; }
+            .print-header h2 { font-size: 16px; font-weight: bold; color: #555; margin: 8px 0 0 0; }
+            .print-header p { font-size: 12px; color: #666; margin: 5px 0; }
+            .report-info {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 15px;
+              font-size: 12px;
+            }
+            .report-info div { padding: 8px; background: #f5f5f5; flex: 1; margin-right: 10px; }
+            .report-info div:last-child { margin-right: 0; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            table thead { background: #3d3d3d; color: white; }
+            table th, table td { border: 1px solid #999; padding: 8px; font-size: 11px; }
+            table th { font-weight: bold; text-align: left; }
+            table tbody tr:nth-child(even) { background: #f9f9f9; }
+            table tbody tr:nth-child(odd) { background: #fff; }
+            .summary {
+              border-top: 2px solid #000;
+              padding-top: 15px;
+              margin-top: 20px;
+            }
+            .summary-row {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 8px;
+              font-size: 13px;
+              font-weight: bold;
+            }
+            .footer {
+              margin-top: 30px;
+              border-top: 1px solid #ccc;
+              padding-top: 10px;
+              text-align: center;
+              font-size: 10px;
+              color: #888;
+            }
+            @media print {
+              body { margin: 0; padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-header">
+            <h1>${settings?.trustName || "Waqf Trust"}</h1>
+            <h2>Expenditures Report</h2>
+            <p>${new Date().toLocaleString()}</p>
+          </div>
+
+          <div class="report-info">
+            <div><strong>Category:</strong> ${expCategory === "all" ? "All Categories" : expCategory.charAt(0).toUpperCase() + expCategory.slice(1)}</div>
+            <div><strong>Date Range:</strong> ${expFromDate || "Start"} to ${expToDate || "End"}</div>
+            <div><strong>Total Records:</strong> ${expenditures.length}</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>S.No</th>
+                <th>Date</th>
+                <th>Expense ID</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Mode</th>
+                <th style="text-align: right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+
+          <div class="summary">
+            <div class="summary-row">
+              <span>NET TOTAL:</span> 
+              <span style="color: ${isNegative ? 'red' : 'green'};">${netAmountDisplay}</span>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p style="margin-bottom: 4px;">Generated by Wasi Foundation Management System</p>
+            <p>© 2026 - All Rights Reserved</p>
+          </div>
+        </body>
+      </html>
+    `)
+
+    printWindow.document.close()
+    printWindow.print()
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -1296,6 +1491,121 @@ export default function ReportsPage() {
                             {row.status === "paid" ? "✓ Paid" : "⏳ Pending"}
                           </Badge>
                         </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Expenditures Report */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Expenditures & Expenses Report</CardTitle>
+          <CardDescription>Filter expenses by date range and category to generate a printable report</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {expError ? <p className="text-sm text-destructive">{expError}</p> : null}
+
+          <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div>
+                <label className="text-xs font-medium mb-1 block">Category</label>
+                <Select value={expCategory} onValueChange={setExpCategory}>
+                  <SelectTrigger className="text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {categoryOptions.map((cat) => (
+                      <SelectItem key={cat} value={cat} className="capitalize">
+                        {cat}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium mb-1 block">From Date</label>
+                <Input
+                  type="date"
+                  value={expFromDate}
+                  onChange={(e) => setExpFromDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium mb-1 block">To Date</label>
+                <Input
+                  type="date"
+                  value={expToDate}
+                  onChange={(e) => setExpToDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Button onClick={loadExpenditureReport} disabled={expLoading}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              {expLoading ? "Loading..." : "Generate Report"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handlePrintExpenditureReport}
+              disabled={expenditures.length === 0}
+            >
+              <Printer className="mr-2 h-4 w-4" />
+              Print Report
+            </Button>
+          </div>
+
+          {expenditures.length > 0 && (
+            <div className="rounded-lg border mt-4 p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div className="rounded bg-blue-50 p-3">
+                  <p className="text-xs text-muted-foreground">Total Records</p>
+                  <p className="text-xl font-bold">{expenditures.length}</p>
+                </div>
+                <div className="rounded bg-red-50 p-3">
+                  <p className="text-xs text-muted-foreground">Paid (Out)</p>
+                  <p className="text-xl font-bold text-red-600">
+                    {formatPKR(expenditures.filter(e => e.mode === "pay").reduce((sum, e) => sum + Number(e.amount || 0), 0))}
+                  </p>
+                </div>
+                <div className="rounded bg-green-50 p-3">
+                  <p className="text-xs text-muted-foreground">Received (In)</p>
+                  <p className="text-xl font-bold text-green-600">
+                    {formatPKR(expenditures.filter(e => e.mode === "received").reduce((sum, e) => sum + Number(e.amount || 0), 0))}
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto pt-2">
+                <table className="w-full text-sm border-collapse">
+                  <thead className="bg-muted/40">
+                    <tr>
+                      <th className="text-left p-2 border-b font-medium text-muted-foreground">Date</th>
+                      <th className="text-left p-2 border-b font-medium text-muted-foreground">Title</th>
+                      <th className="text-left p-2 border-b font-medium text-muted-foreground">Category</th>
+                      <th className="text-left p-2 border-b font-medium text-muted-foreground">Mode</th>
+                      <th className="text-right p-2 border-b font-medium text-muted-foreground">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expenditures.map((row) => (
+                      <tr key={row._id} className="border-b last:border-0 hover:bg-muted/20">
+                        <td className="p-2">{formatDate(row.date)}</td>
+                        <td className="p-2 font-medium">{row.title}</td>
+                        <td className="p-2 capitalize">{row.category}</td>
+                        <td className="p-2 capitalize">
+                          <Badge variant={row.mode === "received" ? "secondary" : "outline"} className="text-[10px]">
+                            {row.mode}
+                          </Badge>
+                        </td>
+                        <td className="text-right p-2">{formatPKR(row.amount)}</td>
                       </tr>
                     ))}
                   </tbody>

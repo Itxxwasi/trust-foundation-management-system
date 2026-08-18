@@ -113,6 +113,7 @@ export default function DonorsPage() {
   const [isEditPaymentOpen, setIsEditPaymentOpen] = useState(false)
   const [editPaymentError, setEditPaymentError] = useState("")
   const [savingPayment, setSavingPayment] = useState(false)
+  const [activeTab, setActiveTab] = useState("donor-list")
 
   const today = new Date()
   const [entryData, setEntryData] = useState({
@@ -330,6 +331,7 @@ export default function DonorsPage() {
       monthlyAmount: String(donor.monthlyAmount || 1000),
       notes: donor.notes || "",
     })
+    setActiveTab("add-donor")
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
@@ -601,7 +603,7 @@ export default function DonorsPage() {
       </div>
 
       {/* MAIN TABS */}
-      <Tabs defaultValue="donor-list" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4 gap-0.5 sm:gap-1 p-1 sm:p-2">
           <TabsTrigger value="donor-list" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3">
             <Users className="h-3.5 sm:h-4 w-3.5 sm:w-4" />
@@ -724,6 +726,15 @@ export default function DonorsPage() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  asChild
+                                >
+                                  <Link href={`/dashboard/donors/${donor._id}`}>
+                                    <FileText className="h-4 w-4" />
+                                  </Link>
+                                </Button>
                                 {canEdit && (
                                   <Button
                                     size="sm"
@@ -788,6 +799,17 @@ export default function DonorsPage() {
                           {formatPKR(donor.monthlyAmount)}
                         </p>
                         <div className="flex gap-2 pt-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1"
+                            asChild
+                          >
+                            <Link href={`/dashboard/donors/${donor._id}`}>
+                              <FileText className="mr-2 h-4 w-4" />
+                              Ledger
+                            </Link>
+                          </Button>
                           {canEdit && (
                             <Button
                               size="sm"
