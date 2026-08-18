@@ -34,7 +34,37 @@ export async function GET(req: NextRequest) {
       { $group: { _id: "$category", total: { $sum: "$amount" } } },
     ])
 
-    return NextResponse.json({ expenditures, totalsByCategory })
+    let openingBalance = 0
+    if (dateFrom) {
+      const pastFilter: Record<string, unknown> = {}
+      if (category && category !== "all") {
+        pastFilter.category = category
+      }
+      pastFilter.date = { $lt: new Date(dateFrom) }
+
+      const pastTotals = await Expenditure.aggregate([
+        { $match: pastFilter },
+        {
+          $group: {
+            _id: "$mode",
+            total: { $sum: "$amount" },
+          },
+        },
+      ])
+
+      let pastReceived = 0
+      let pastPaid = 0
+      pastTotals.forEach((t) => {
+        if (t._id === "received") pastReceived += t.total
+        else pastPaid += t.total
+      })
+      openingBalance = pastReceived - pastPaid
+    } else {
+      // If no dateFrom, opening balance is 0 for the selected view
+      openingBalance = 0
+    }
+
+    return NextResponse.json({ expenditures, totalsByCategory, openingBalance })
   } catch (error) {
     return NextResponse.json({ error: "Failed to fetch expenditures" }, { status: 500 })
   }

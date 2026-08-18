@@ -696,7 +696,9 @@ export default function DonorsPage() {
                         filteredDonors.map((donor) => (
                           <TableRow key={donor._id} className="hover:bg-muted/50">
                             <TableCell className="font-medium text-primary">
-                              {donor.donorId}
+                              <Link href={`/dashboard/donors/${donor._id}`} className="hover:underline">
+                                {donor.donorId}
+                              </Link>
                             </TableCell>
                             <TableCell className="font-medium">
                               {donor.name}
@@ -778,7 +780,9 @@ export default function DonorsPage() {
                         <div className="flex items-start justify-between">
                           <div>
                             <p className="font-bold text-primary">
-                              {donor.donorId}
+                              <Link href={`/dashboard/donors/${donor._id}`} className="hover:underline">
+                                {donor.donorId}
+                              </Link>
                             </p>
                             <p className="font-medium">{donor.name}</p>
                           </div>

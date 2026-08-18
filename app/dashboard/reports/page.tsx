@@ -174,6 +174,7 @@ export default function ReportsPage() {
   const [expFromDate, setExpFromDate] = useState(startOfMonth)
   const [expToDate, setExpToDate] = useState(today)
   const [expenditures, setExpenditures] = useState<ExpenditureItem[]>([])
+  const [expOpeningBalance, setExpOpeningBalance] = useState(0)
   const [expLoading, setExpLoading] = useState(false)
   const [expError, setExpError] = useState("")
 
@@ -357,7 +358,7 @@ export default function ReportsPage() {
           <title>Donor Report - ${selectedDonor ? escapeHtml(selectedDonor.name) : "All Donors"}</title>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
+            body { font-family: "Times New Roman", Times, serif; color: #333; line-height: 1.6; }
             .print-header { 
               text-align: center;
               border-bottom: 2px solid #000; 
@@ -523,7 +524,7 @@ export default function ReportsPage() {
           <title>Donor Directory Report</title>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
+            body { font-family: "Times New Roman", Times, serif; color: #333; line-height: 1.6; }
             .print-header {
               text-align: center;
               border-bottom: 2px solid #000;
@@ -710,7 +711,7 @@ export default function ReportsPage() {
           <title>Payment Status Report</title>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; color: #333; line-height: 1.4; margin: 10px; }
+            body { font-family: "Times New Roman", Times, serif; color: #333; line-height: 1.4; margin: 10px; }
             .print-header {
               text-align: center;
               border-bottom: 3px solid #000;
@@ -826,8 +827,10 @@ export default function ReportsPage() {
       }
 
       setExpenditures(data.expenditures || [])
+      setExpOpeningBalance(data.openingBalance || 0)
     } catch (error) {
       setExpenditures([])
+      setExpOpeningBalance(0)
       setExpError(error instanceof Error ? error.message : "Failed to load report")
     } finally {
       setExpLoading(false)
@@ -846,10 +849,14 @@ export default function ReportsPage() {
       return
     }
 
-    let netAmount = 0
+    let periodReceived = 0
+    let periodExpenses = 0
     const rows = expenditures.map((item, index) => {
-      const itemAmount = item.mode === "received" ? Number(item.amount || 0) : -Number(item.amount || 0)
-      netAmount += itemAmount
+      if (item.mode === "received") {
+        periodReceived += Number(item.amount || 0)
+      } else {
+        periodExpenses += Number(item.amount || 0)
+      }
       return `
         <tr>
           <td>${index + 1}</td>
@@ -863,9 +870,8 @@ export default function ReportsPage() {
       `
     }).join("")
 
-    const isNegative = netAmount < 0
-    const formattedNetAmount = formatPKR(Math.abs(netAmount))
-    const netAmountDisplay = isNegative ? `-${formattedNetAmount}` : formattedNetAmount
+    const totalBalances = expOpeningBalance + periodReceived
+    const remainingBalance = totalBalances - periodExpenses
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -874,7 +880,7 @@ export default function ReportsPage() {
           <title>Expenditures Report</title>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; color: #333; line-height: 1.4; margin: 20px; }
+            body { font-family: "Times New Roman", Times, serif; color: #333; line-height: 1.4; margin: 20px; }
             .print-header {
               text-align: center;
               border-bottom: 3px solid #000;
@@ -955,8 +961,24 @@ export default function ReportsPage() {
 
           <div class="summary">
             <div class="summary-row">
-              <span>NET TOTAL:</span> 
-              <span style="color: ${isNegative ? 'red' : 'green'};">${netAmountDisplay}</span>
+              <span>Opening Balance:</span> 
+              <span style="color: ${expOpeningBalance < 0 ? 'red' : 'green'};">${formatPKR(expOpeningBalance)}</span>
+            </div>
+            <div class="summary-row">
+              <span>Total Received (Period):</span> 
+              <span style="color: green;">${formatPKR(periodReceived)}</span>
+            </div>
+            <div class="summary-row">
+              <span>Total Balances:</span> 
+              <span style="color: ${totalBalances < 0 ? 'red' : 'green'};">${formatPKR(totalBalances)}</span>
+            </div>
+            <div class="summary-row">
+              <span>Less Expenses (Period):</span> 
+              <span style="color: red;">${formatPKR(periodExpenses)}</span>
+            </div>
+            <div class="summary-row" style="border-top: 1px solid #000; padding-top: 8px; margin-top: 8px;">
+              <span>REMAINING BALANCE:</span> 
+              <span style="color: ${remainingBalance < 0 ? 'red' : 'green'}; font-size: 15px;">${formatPKR(remainingBalance)}</span>
             </div>
           </div>
 
